@@ -1,34 +1,3 @@
-<!----- Conversion time: 3.646 seconds.
-
-
-Using this Markdown file:
-
-1. Cut and paste this output into your source file.
-2. See the notes and action items below regarding this conversion run.
-3. Check the rendered output (headings, lists, code blocks, tables) for proper
-   formatting and use a linkchecker before you publish this page.
-
-Conversion notes:
-
-* Docs to Markdown version 1.0β17
-* Mon Oct 21 2019 16:19:30 GMT-0700 (PDT)
-* Source doc: https://docs.google.com/open?id=1TkMEhGpZMDMVQgV45Pd8Kv3XPtj0hTOHslndL_6t-Ao
-* This is a partial selection. Check to make sure intra-doc links work.
-
-WARNING:
-You have 3 H1 headings. You may want to use the "H1 -> H2" option to demote all headings by one level.
-
------>
-
-
-<p style="color: red; font-weight: bold">>>>>>  gd2md-html alert:  ERRORs: 0; WARNINGs: 1; ALERTS: 0.</p>
-<ul style="color: red; font-weight: bold"><li>See top comment block for details on ERRORs and WARNINGs. <li>In the converted Markdown or HTML, search for inline alerts that start with >>>>>  gd2md-html alert:  for specific instances that need correction.</ul>
-
-<p style="color: red; font-weight: bold">Links to alert messages:</p>
-<p style="color: red; font-weight: bold">>>>>> PLEASE check and correct alert issues and delete this message and the inline alerts.<hr></p>
-
-
-
 # Week 1
 
 
@@ -672,3 +641,6 @@ The Host header line is used by Web proxy caches. The Connection header is used 
 
 <!-- Docs to Markdown version 1.0β17 -->
 
+<!--stackedit_data:
+eyJoaXN0b3J5IjpbLTI0MzE1MTVdfQ==
+-->
