@@ -1,3 +1,4 @@
+#!/bin/env python3
 '''
 Author:       boettchc
 Class:        cs372-400-f2019
@@ -29,7 +30,6 @@ post: application exits with status 0
 '''
 def trap_sigint(sig, frame):
   print('SIGINT received. Exiting.');
-  frame.clear() 
   sys.exit(0);
 
 '''
@@ -85,10 +85,11 @@ def start_server(port):
     connectionSocket, addr = serverSocket.accept()
     msgin = connectionSocket.recv(500)
     if parse_msg(msgin, QUIT, connectionSocket):
-      print(msgin.decode('utf-8'))
+      print(msgin.decode('utf-8').rstrip(), flush=True)
       msgout = input(HANDLE)
+      # TODO parse message out for \quit as well   
       enc_msgout = (HANDLE+msgout).encode('ascii') 
-      connectionSocket.send(enc_msgout)
+      connectionSocket.sendall(enc_msgout)
       
 def main():
   #register the signal handler for SIGINT
