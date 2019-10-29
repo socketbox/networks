@@ -5,7 +5,7 @@ Assignment:   Program 1
 Date:         October 29, 2019
 
 Much of this code was influenced by "Beej's Guide to Network Programming." Specfically, pages 17, 
-25, 28, 32, 35, and 36 in the document available from https://beej.us/guide/bgnet/pdf/bgnet_usl_c_1.pdf.
+25, 28, 32, 35, 36, and 45 in the document available from https://beej.us/guide/bgnet/pdf/bgnet_usl_c_1.pdf.
 
 Other resources paraphrased or quoted verbatim are noted in context-specific comments within the code.
 */
@@ -25,8 +25,11 @@ Other resources paraphrased or quoted verbatim are noted in context-specific com
 #define DEBUG 0
 #endif
 
-//max length for user messages is 500 chars, plus null byte
-#define MSG_MAX 	  500
+
+//max length for user messages is 500 chars, minus handle and prompt
+#define SMSG_MAX 	  488
+//max length for received user messages is 500 chars
+#define RMSG_MAX 	  500
 //max length for user handle is 10 chars, but we will add "> \0"
 #define HANDLE_LEN 	13
 //tcp protocol is listed as 6 in /etc/protocols on flip
@@ -39,76 +42,6 @@ void usage()
 {
 	printf("chatclient [server_address] [port]\n");
 	exit(0);
-}
-
-
-/*
- * pre: 	n/a
- * in:		pointer to sockaddr_in and command-line args array
- * out:		n/a
- * post:  sockaddr_in ready for connecting
- * note: 	wasn't aware of all the heavy lifting that getaddrinfo() does when I wrote this, nor did
- *        I take into account that the user would be supplying a hostname and not an IP :|
-void build_socket_struct(struct sockaddr_in *srvr, struct in_addr *ip, char *argv[])
-{
-	//convert IP and check for errors before proceeding
-	//if( inet_pton(AF_INET, argv[1], &(srvr->sin_addr)) )
-	if( inet_pton(AF_INET, argv[1], ip) )
-	{
-    //put address in sockaddr_in
-    srvr->sin_addr = *ip;
-
-		//set address family to Internet
-		srvr->sin_family = AF_INET;
-		
-		//convert port arg to int and put it in netowrk byte order
-		srvr->sin_port = htons(atoi( argv[2] ));	
-		
-		//zero out sin_zero padding
-		memset(&(srvr->sin_zero), '0', 8);
-	}
-}
-*/
-/*
- * pre: 	results struct has been zeroed out
- * in:		pointer to array of addrinfo structs and command-line args array
- * out:		n/a
- * post:  results array populated by call to getaddrinfo()
- */
-void build_socket_struct(struct addrinfo **results, char *argv[])
-{
-  struct addrinfo cfg;
-  memset(&cfg, 0, sizeof(struct addrinfo);
-  cfg.ai_family = AF_UNSPEC;
-  cfg.ai_socktype = SOCK_STREAM;
-  cfg.ai_flags = AI_PASSIVE;
-  cfg.ai_protocol = TCP_FLAG;
-
-  //convert port to network byte order
-  uint16_t port = htons(atoi( argv[2] ));
-  if(rv = getaddrinfo(argv[1], port, &cfg, results != 0)
-  {
-    clean_quit(-1, rv); 
-  }
-}
-
-
-/* 
- * pre:   n/a
- * in:    a pointer to a character array
- * out:   n/a
- * post:  the client's handle (with prompt) is in the provided char array
- */
-void get_handle(char *handle)
-{
-  printf("What's your handle (maximum of 10 characters)? ");
-  fgets(handle, HANDLE_LEN, stdin);
-  //strip trailing newline: https://stackoverflow.com/a/28462221/148680 
-  handle[strcspn(handle, "\n")] = 0;
-  //append "> "
-  strcat(handle, "> \0");
-  if(DEBUG)
-    printf("User's handle: %s", handle);
 }
 
 
@@ -130,16 +63,107 @@ void clean_quit(int sfd, int e)
 }
 
 
-int parse_msg(char *msg)
+/*
+ * note: 	wasn't aware of all the heavy lifting that getaddrinfo() does when I wrote this, nor did
+ *        I take into account that the user would be supplying a hostname and not an IP :|
+ *
+ * pre: 	n/a
+ * in:		pointer to sockaddr_in and command-line args array
+ * out:		n/a
+ * post:  sockaddr_in ready for connecting
+void build_socket_struct(struct sockaddr_in *srvr, struct in_addr *ip, char *argv[])
 {
-  regex_t pattern;
-  memset(&pattern, '0', sizeof(regex_t));
-  
-  if(regcomp(&pattern, QUIT_PATT))
-    printf("foo");
-  else
-    printf("bar");
+	//convert IP and check for errors before proceeding
+	//if( inet_pton(AF_INET, argv[1], &(srvr->sin_addr)) )
+	if( inet_pton(AF_INET, argv[1], ip) )
+	{
+    //put address in sockaddr_in
+    srvr->sin_addr = *ip;
+
+		//set address family to Internet
+		srvr->sin_family = AF_INET;
+		
+		//convert port arg to int and put it in netowrk byte order
+		srvr->sin_port = htons(atoi( argv[2] ));	
+		
+		//zero out sin_zero padding
+		memset(&(srvr->sin_zero), '0', 8);
+	}
+}*/
+
+/*
+ * pre: 	results struct has been zeroed out
+ * in:		pointer to array of addrinfo structs and command-line args array
+ * out:		n/a
+ * post:  results array populated by call to getaddrinfo()
+ */
+void build_socket_struct(struct addrinfo **results, char *argv[])
+{
+  if(DEBUG)
+    printf("In build socket struct...");
+  struct addrinfo cfg;
+  memset(&cfg, 0, sizeof(struct addrinfo));
+  cfg.ai_family = AF_UNSPEC;
+  cfg.ai_socktype = SOCK_STREAM;
+  cfg.ai_flags = AI_PASSIVE;
+  cfg.ai_protocol = TCP_FLAG;
+
+  int rv = -2;
+  //pass host name and port without parsing 
+  if( ( rv = getaddrinfo(argv[1], argv[2], &cfg, results) ) == -1 )
+  {
+    clean_quit(-1, rv); 
+  }
 }
+
+
+/* 
+ * pre:   n/a
+ * in:    a pointer to a character array
+ * out:   n/a
+ * post:  the client's handle (with prompt) is in the provided char array
+ */
+void get_handle(char *handle)
+{
+  printf("What's your handle (maximum of 10 characters)? ");
+  fgets(handle, HANDLE_LEN, stdin);
+  
+  //strip trailing newline: https://stackoverflow.com/a/28462221/148680 
+  handle[strcspn(handle, "\n")] = 0;
+  if(DEBUG)
+    printf("after stcspn");
+  //append "> "
+  strcat(handle, "> \0");
+  if(DEBUG)
+    printf("User's handle: %s", handle);
+}
+
+/*
+ * pre:   a handle has been selected by the user
+ * in:    a message buffer and a handle
+ * out:   an integer indicating whether or not the user's message contained the \quit command
+ *        (0 for "yes", 1 for "no")
+ * post:  if user's message doesn't start with \quit, the message is sent with handle prepended
+ */
+//TODO
+int parse_msg(char *msg, char *handle)
+{
+  regex_t res;
+  memset(&res, '0', sizeof(regex_t));
+
+  //create a tmp buffer
+  char tmp[SMSG_MAX];
+  memset(tmp, '\0', SMSG_MAX);
+  strcat(tmp, handle);
+  strcat(tmp, msg);
+  memcpy(msg, tmp, sizeof(char)*SMSG_MAX);
+  /*if(regcomp(&res, QUIT_PATT, 0))
+    ; 
+  else
+    ;*/
+  return 1;
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -158,39 +182,56 @@ int main(int argc, char *argv[])
   struct in_addr ip4;	
   memset(&ip4, 0, sizeof(struct in_addr));	
   memset(&sconn, 0, sizeof(struct sockaddr_in));	
-	
   */
-  build_socket_struct(&sconn, &ip4, argv);
+  struct addrinfo *results, *h;
+  build_socket_struct(&results, argv);
 
 	//create the socket file descriptor; 
 	int sckt = socket(PF_INET, SOCK_STREAM, 6);
-	
-	//connect!
-	if( connect(sckt, (struct sockaddr *)&sconn, sizeof sconn) < 0 )
+
+  struct addrinfo host;
+  memset(&host, 0, sizeof(struct addrinfo));
+ 
+  /* There's got to be a better way to do this... */
+  for(h = results; h != NULL; h = h->ai_next)
   {
-    clean_quit(sckt, errno);	
+	  if( connect(sckt, h->ai_addr, h->ai_addrlen) == -1)
+    {
+      close(sckt);
+      fprintf(stderr, "%s", strerror(errno));	
+      continue;
+    }
+    if(DEBUG)
+      fprintf(stderr, "Connecting to %i", *(h->ai_canonname)); 
+    break;
   }
 
   //add one to maximum for null byte
-  char msg_buff[MSG_MAX+1];
+  char send_msg_buff[SMSG_MAX+1];
+  char recv_msg_buff[RMSG_MAX];
   do
   {
-    memset(msg_buff, '\0', MSG_MAX);
+    //clear the message buffers
+    memset(recv_msg_buff, '\0', RMSG_MAX);
+    memset(send_msg_buff, '\0', SMSG_MAX);
+    //print handle as prompt 
     printf("%s", handle);
-	  fgets(msg_buff, MSG_MAX, stdin);
-    if(parse_msg(msg_buff))
-      send(sckt, msg_buff, strlen(msg_buff), 0); 
+	  fgets(send_msg_buff, SMSG_MAX, stdin);
+    
+    if(parse_msg(send_msg_buff, handle))
+    {
+      if(DEBUG)
+        printf("strlen of send buff: %lu", strlen(send_msg_buff));
+      send(sckt, send_msg_buff, strlen(send_msg_buff), 0); 
+    }
     else
       clean_quit(sckt, 0);
+    
+    recv(sckt, recv_msg_buff, RMSG_MAX, 0);
+    fprintf(stdout, "%s\n", recv_msg_buff);
   }
   while(sckt);
+  
+  return 0;
 }
-
-
-
-
-
-
-
-
 
