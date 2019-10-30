@@ -36,8 +36,6 @@ Other resources paraphrased or quoted verbatim are noted in context-specific com
 #define RMSG_MAX 	  513
 //max length for user handle is 10 chars, but we will add "> \0"
 #define HANDLE_LEN 	13
-//tcp protocol is listed as 6 in /etc/protocols on flip
-#define TCP_FLAG 		6
 //pattern for parsing \quit command
 #define QUIT_PATT   "^.*\\quit"
 
@@ -98,20 +96,28 @@ void clean_quit(int sfd, int e)
 void build_socket_struct(struct addrinfo **results, char *argv[])
 {
   if(DEBUG1)
-    printf("In build socket struct...");
+  {
+    fprintf(stderr, "In build socket struct...");
+  }
   struct addrinfo cfg;
   memset(&cfg, 0, sizeof(struct addrinfo));
-  cfg.ai_family = AF_UNSPEC;
+  cfg.ai_family = AF_INET;
   cfg.ai_socktype = SOCK_STREAM;
   cfg.ai_flags = AI_PASSIVE;
-  cfg.ai_protocol = TCP_FLAG;
+  cfg.ai_protocol = IPPROTO_TCP;
 
   int rv = -2;
   //pass host name and port without parsing 
-  if( ( rv = getaddrinfo(argv[1], argv[2], &cfg, results) ) == -1 )
+  if( ( rv = getaddrinfo(argv[1], argv[2], &cfg, results) ) != 0 )
   {
+    if(DEBUG1)
+    {
+      fprintf(stderr, "getaddrinfo %s %s failed:", argv[1], argv[2]);
+    }
     clean_quit(-1, rv); 
   }
+  if(DEBUG1)
+    fprintf(stderr, "results: %p", results);
 }
 
 
@@ -123,18 +129,26 @@ void build_socket_struct(struct addrinfo **results, char *argv[])
  */
 void get_handle(char *handle)
 {
+  if(DEBUG1)
+    fprintf(stderr, "In get_handle...\n");
   printf("What's your handle (maximum of 10 characters)? ");
   //writes 10 chars to handle and then puts a null byte at the end 
   fgets(handle, HANDLE_LEN-2, stdin);
   
+  if(DEBUG1)
+    fprintf(stderr, "After fgets\n");
+  
   //strip trailing newline: https://stackoverflow.com/a/28462221/148680 
   handle[strcspn(handle, "\n")] = 0;
   if(DEBUG1)
-    printf("after stcspn");
+    fprintf(stderr, "after stcspn\n");
   //append "> "
   strcat(handle, "> \0");
   if(DEBUG1)
-    printf("User's handle: %s", handle);
+  {    
+    fprintf(stderr, "User's handle: %s\n", handle);
+    fflush(stderr);
+  }
 }
 
 
@@ -155,24 +169,24 @@ int parse_msg(char *msg, char *handle)
   //the struct for the compiled regex
   regex_t res;
   memset(&res, '0', sizeof(regex_t));
-  //we're passing in the REG_NOSUB flag, so we don't care about these next two vars 
-  size_t matchcnt = -1; 
-  regmatch_t *matches = NULL;
+ 
+  //tmp array for strcat operations
+  char tmp[SMSG_MAX];
 
-  if(compres = regcomp(&res, QUIT_PATT, REG_NOSUB) == 0)
+  if( (compres = regcomp(&res, QUIT_PATT, REG_NOSUB)) == 0)
   { 
-    if( regexec(&res, msg, matchcnt, matches, 0) == 0 )
+    if( regexec(&res, msg, -1, NULL, 0) == 0 )
       retval = 0;
     else
     {
       //create a tmp buffer
-      char tmp[SMSG_MAX];
-      memset(tmp, '\0', SMSG_MAX);
+      memset(tmp, '\0', sizeof(char)*SMSG_MAX);
       strcat(tmp, handle);
       strcat(tmp, msg);
       memcpy(msg, tmp, sizeof(char)*SMSG_MAX);
       retval = 1;
     }
+    regfree(&res);
   }
   else
   {
@@ -201,28 +215,36 @@ int main(int argc, char *argv[])
   get_handle(handle);
 
   //config socket
-  struct addrinfo *results, *h;
-  build_socket_struct(&results, argv);
+  struct addrinfo results, h;
+  struct addrinfo *res = &results;
+  struct addrinfo *hptr = &h;
+  memset(&results, 0, sizeof(struct addrinfo));
+  memset(&h, 0, sizeof(struct addrinfo));
+  build_socket_struct(&res, argv);
 
 	//create the socket file descriptor; 
-	int sckt = socket(PF_INET, SOCK_STREAM, 6);
+	int sckt = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
   struct addrinfo host;
   memset(&host, 0, sizeof(struct addrinfo));
- 
+
+  if(DEBUG1)
+    fprintf(stderr, "Prior to looping through results..\n");
+
   /* There's got to be a better way to do this... */
-  for(h = results; h != NULL; h = h->ai_next)
-  {
-	  if( connect(sckt, h->ai_addr, h->ai_addrlen) == -1)
+  for(hptr = res; hptr != NULL; hptr = hptr->ai_next)
+  {//this results in invalid argument failure
+	  if( connect(sckt, hptr->ai_addr, hptr->ai_addrlen) == -1)
     {
+      if(DEBUG1)
+        fprintf(stderr, "After connect() failed.\n");
       close(sckt);
       fprintf(stderr, "%s", strerror(errno));	
       continue;
     }
-    if(DEBUG1)
-      fprintf(stderr, "Connecting to %i", *(h->ai_canonname)); 
     break;
   }
+  freeaddrinfo(res);
 
   //add one to maximum for null byte
   char send_msg_buff[SMSG_MAX];
