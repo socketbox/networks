@@ -141,30 +141,54 @@ void get_handle(char *handle)
 /*
  * pre:   a handle has been selected by the user
  * in:    a message buffer and a handle
- * out:   an integer indicating whether or not the user's message contained the \quit command
+ * out:   retval, an integer indicating whether or not the user's message contained the \quit command
  *        (0 for "yes", 1 for "no")
  * post:  if user's message doesn't start with \quit, the message is sent with handle prepended
  */
-//TODO
 int parse_msg(char *msg, char *handle)
 {
+  //result of regcomp
+  int compres = -1;
+  //function return value
+  int retval = -1;
+
+  //the struct for the compiled regex
   regex_t res;
   memset(&res, '0', sizeof(regex_t));
+  size_t matchcnt = -1; 
+  //regmatch_t matches[1];
+  regmatch_t *matches = NULL;
+  //memset(matches, '0', sizeof(regmatch_t));
 
-  //create a tmp buffer
-  char tmp[SMSG_MAX];
-  memset(tmp, '\0', SMSG_MAX);
-  strcat(tmp, handle);
-  strcat(tmp, msg);
-  memcpy(msg, tmp, sizeof(char)*SMSG_MAX);
-  /*if(regcomp(&res, QUIT_PATT, 0))
-    ; 
+  if(compres = regcomp(&res, QUIT_PATT, REG_NOSUB) == 0)
+  { 
+    if( regexec(&res, msg, matchcnt, matches, 0) == 0 )
+      retval = 0;
+    else
+    {
+      //create a tmp buffer
+      char tmp[SMSG_MAX];
+      memset(tmp, '\0', SMSG_MAX);
+      strcat(tmp, handle);
+      strcat(tmp, msg);
+      memcpy(msg, tmp, sizeof(char)*SMSG_MAX);
+      retval = 1;
+    }
+  }
   else
-    ;*/
-  return 1;
+  {
+    //create buffer for error msg
+    int buffsz = 256;
+    char errbuff[buffsz];
+    regerror(compres, &res, errbuff, buffsz);
+    fprintf(stderr, "Failed to compile regex: %s\n", errbuff);
+    exit(compres);
+  }
+  return retval;
 }
 
 
+//TODO connection refused needs to error out and exit
 int main(int argc, char *argv[])
 {
 	if(argc != 3 )
@@ -225,7 +249,7 @@ int main(int argc, char *argv[])
       send(sckt, send_msg_buff, strlen(send_msg_buff), 0); 
     }
     else
-      clean_quit(sckt, 0);
+      clean_quit(sckt, 1);
     
     recv(sckt, recv_msg_buff, RMSG_MAX, 0);
     fprintf(stdout, "%s\n", recv_msg_buff);
