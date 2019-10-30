@@ -9,19 +9,18 @@ Some of this code (the first part of the start_server() function) was taken from
 The latter half of the start_server() function was taken from the official Python documentation at
 https://docs.python.org/3.6/library/socket.html?highlight=socket#example
 '''
-
 from socket import *
 import argparse
 import signal
 import sys
-from select import *
 import re
 
 #regex for checking to see if the client wants to quit
-#QUIT=br'^.*\\quit'
 QUIT=r'^.*\\quit'
 DEBUG=False
 HANDLE='boettchc> '
+MSG_MAX=513
+
 
 '''
 pre:  a SIGINT has been received by the program
@@ -32,6 +31,7 @@ post: application exits with status 0
 def trap_sigint(sig, frame):
   print('SIGINT received. Exiting.');
   sys.exit(0);
+
 
 '''
 pre:  n/a
@@ -52,6 +52,7 @@ def parse_args():
     print(vars(args))
   return args
 
+
 '''
 pre:  connection established with client and 
 in:   a byte sequence received by the client, a regular expression, and an open socket  
@@ -70,6 +71,7 @@ def parse_msg(msg, regex, cx):
     retval = True
   return retval
 
+
 '''
 pre:  n/a 
 in:   a port supplied by the user which the server will listen on
@@ -86,7 +88,7 @@ def start_server(port):
     connectionSocket, addr = serverSocket.accept()
     with connectionSocket:
       while connectionSocket:
-        msg = connectionSocket.recv(500)
+        msg = connectionSocket.recv(MSG_MAX)
         #decode the msg received and strip the newline
         print(msg.decode('utf-8').rstrip())
         if not msg: break
@@ -95,36 +97,10 @@ def start_server(port):
         if parse_msg(msgout, QUIT, connectionSocket):
           msgout = (HANDLE + msgout).encode('utf-8')
           connectionSocket.sendall(msgout)
-      print("Connection closed by client.")
-  '''
-  #we'll poll the socket, blocking until there's activity
-  p = poll()
-  while True:
-    #created with first part of TCP handshake
-    connectionSocket, addr = serverSocket.accept()
-    p.register(connectionSocket)
-    msgin = connectionSocket.recv(500)
-    #returns a list of tuples (fd, event)
-    events = p.poll()
-    for e in events:
-      if (e[1] & (POLLIN | POLLPRI)) > 0:
-        if DEBUG:
-          print("Got POLLIN or POLLPRI")
-        msgin = connectionSocket.recv(500)
-        parse_msg(msgin, QUIT, connectionSocket)
-        print(msgin.decode('utf-8').rstrip(), flush=True)
-      elif e[1] & POLLOUT > 0:
-        if DEBUG:
-          print("Got POLLIN or POLLPRI")
-        msgout = input(HANDLE)
-        # TODO parse message out for \quit as well
-        enc_msgout = (HANDLE+msgout).encode('ascii')
-        connectionSocket.sendall(enc_msgout)
-      elif (e[1] & (POLLHUP | POLLNVAL)) > 0:
-        print("POLLHUP or POLLNVAL received: " + e)
-      else:
-        print("Printing events: " + events);
-'''
+        else:
+          break
+      print("Connection closed.")
+
 
 def main():
   #register the signal handler for SIGINT
