@@ -37,7 +37,7 @@ Other resources paraphrased or quoted verbatim are noted in context-specific com
 //max length for user handle is 10 chars, but we will add "> \0"
 #define HANDLE_LEN 	13
 //pattern for parsing \quit command
-#define QUIT_PATT   "^.*\\quit"
+#define QUIT_PATT   "^.*\\\\quit"
 
 
 void usage()
@@ -97,7 +97,7 @@ void build_socket_struct(struct addrinfo **results, char *argv[])
 {
   if(DEBUG1)
   {
-    fprintf(stderr, "In build socket struct...");
+    fprintf(stderr, "In build socket struct...\n");
   }
   struct addrinfo cfg;
   memset(&cfg, 0, sizeof(struct addrinfo));
@@ -116,8 +116,6 @@ void build_socket_struct(struct addrinfo **results, char *argv[])
     }
     clean_quit(-1, rv); 
   }
-  if(DEBUG1)
-    fprintf(stderr, "results: %p", results);
 }
 
 
@@ -231,18 +229,26 @@ int main(int argc, char *argv[])
   if(DEBUG1)
     fprintf(stderr, "Prior to looping through results..\n");
 
+  int success = 0;
   /* There's got to be a better way to do this... */
   for(hptr = res; hptr != NULL; hptr = hptr->ai_next)
-  {//this results in invalid argument failure
+  {
 	  if( connect(sckt, hptr->ai_addr, hptr->ai_addrlen) == -1)
     {
       if(DEBUG1)
         fprintf(stderr, "After connect() failed.\n");
       close(sckt);
-      fprintf(stderr, "%s", strerror(errno));	
+      fprintf(stderr, "%s\n", strerror(errno));	
       continue;
     }
+    else
+      success = 1;
     break;
+  }
+  if(success == 0)
+  {
+    fprintf(stderr, "Failed to connect. Exiting: %s.\n", strerror(errno));
+    exit(errno); 
   }
   freeaddrinfo(res);
 
