@@ -252,16 +252,14 @@ int main(int argc, char *argv[])
   }
   freeaddrinfo(res);
 
-  //add one to maximum for null byte
-  char send_msg_buff[SMSG_MAX];
-  char recv_msg_buff[RMSG_MAX];
+  //clear the message buffers
+  char send_msg_buff[SMSG_MAX] = {'\0'};
+  char recv_msg_buff[RMSG_MAX] = {'\0'};
   do
   {
-    //clear the message buffers
-    memset(recv_msg_buff, '\0', RMSG_MAX);
-    memset(send_msg_buff, '\0', SMSG_MAX);
     //print handle as prompt 
     printf("%s", handle);
+    fflush(stdout);
 	  fgets(send_msg_buff, SMSG_MAX, stdin);
     
     if(parse_msg(send_msg_buff, handle))

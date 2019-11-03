@@ -29,7 +29,7 @@ out:  n/a
 post: application exits with status 0
 '''
 def trap_sigint(sig, frame):
-  print('SIGINT received. Exiting.');
+  print('SIGINT received. Exiting.', flush=True);
   sys.exit(0);
 
 
@@ -64,7 +64,7 @@ def parse_msg(msg, regex, cx):
   pattern = re.compile(regex)
   if pattern.match(msg):
     #close cx
-    print("Quitting...Bye!\n")
+    print("Quitting...Bye!\n", flush=True)
     cx.shutdown(SHUT_RDWR) 
     cx.close()
   else:
@@ -90,7 +90,7 @@ def start_server(port):
       while connectionSocket:
         msg = connectionSocket.recv(MSG_MAX)
         #decode the msg received and strip the newline
-        print(msg.decode('utf-8').rstrip())
+        print(msg.decode('utf-8').rstrip(), flush=True)
         if not msg: break
         msgout = input(HANDLE)
         #check to see if message contains \quit
@@ -99,7 +99,7 @@ def start_server(port):
           connectionSocket.sendall(msgout)
         else:
           break
-      print("Connection closed.")
+      print("Connection closed.", flush=True)
 
 
 def main():
