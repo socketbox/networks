@@ -1,7 +1,7 @@
-*Author:*       boettchc
-Class:        cs372-400-f2019
-Assignment:   Program 1 
-Date:         October 29, 2019
+**Author:**       boettchc
+**Class:**        cs372-400-f2019
+**Assignment:**   Program 1 
+**Date:**         October 29, 2019
 
 ### Compiling and Running the C client
 
@@ -32,4 +32,11 @@ Either client or server type `\quit` and press Enter. This closes the connection
 remains running and listening.
 
 An interrupt signal (ctrl-c) kills either process.
+
+### Test History
+Initially, testing was done locally, using a terminal mulitplexer and the loopback interface. Then
+a tunneled connection was tested, with the server-side script running on flip2 and the client
+running on the student's machine. Prior to submission, compilation and testing were done on flip2. 
+That resulted in several latent bugs being revealed. But debugging with gdb on that platform was inconsistent. 
+Final development and testing was moved to os1.engr.oregonstate.edu (please don't tell Ben Brewster). 
 
