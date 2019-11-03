@@ -29,8 +29,8 @@ out:  n/a
 post: application exits with status 0
 '''
 def trap_sigint(sig, frame):
-  print('SIGINT received. Exiting.', flush=True);
-  sys.exit(0);
+  print("SIGINT received. Exiting.", flush=True)
+  sys.exit(0)
 
 
 '''
@@ -82,6 +82,8 @@ def start_server(port):
   if DEBUG:
     print('Starting server on port ', port)
   serverSocket = socket(AF_INET,SOCK_STREAM)
+  #reuse the socket if server terminates abruptly
+  serverSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1) 
   serverSocket.bind(('', port))
   serverSocket.listen(1)
   while True:
