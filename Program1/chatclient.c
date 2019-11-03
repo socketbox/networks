@@ -131,8 +131,15 @@ void get_handle(char *handle)
     fprintf(stderr, "In get_handle...\n");
   printf("What's your handle (maximum of 10 characters)? ");
   //writes 10 chars to handle and then puts a null byte at the end 
-  fgets(handle, HANDLE_LEN-2, stdin);
-  
+  fgets(handle, HANDLE_LEN, stdin);
+  //eat remains in buffer 
+  if (strchr(handle, '\n') == NULL)                     
+  {                                                   
+    int ch;                                           
+    while ((ch = fgetc(stdin)) != '\n' && ch != EOF); 
+  }                                                   
+
+
   if(DEBUG1)
     fprintf(stderr, "After fgets\n");
   
@@ -169,16 +176,15 @@ int parse_msg(char *msg, char *handle)
   memset(&res, '0', sizeof(regex_t));
  
   //tmp array for strcat operations
-  char tmp[SMSG_MAX];
+  char tmp[SMSG_MAX] = {'\0'};
 
-  if( (compres = regcomp(&res, QUIT_PATT, REG_NOSUB)) == 0)
+  if((compres = regcomp(&res, QUIT_PATT, REG_NOSUB)) == 0)
   { 
     if( regexec(&res, msg, -1, NULL, 0) == 0 )
       retval = 0;
     else
     {
       //create a tmp buffer
-      memset(tmp, '\0', sizeof(char)*SMSG_MAX);
       strcat(tmp, handle);
       strcat(tmp, msg);
       memcpy(msg, tmp, sizeof(char)*SMSG_MAX);
@@ -277,6 +283,10 @@ int main(int argc, char *argv[])
     
     recv(sckt, recv_msg_buff, RMSG_MAX, 0);
     fprintf(stdout, "%s\n", recv_msg_buff);
+
+    //clear buffers
+    memset(send_msg_buff, '\0', SMSG_MAX);
+    memset(recv_msg_buff, '\0', RMSG_MAX);
   }
   while(sckt);
     
