@@ -1,5 +1,12 @@
+/*
+ * Note to grader: much of this is influenced by Kerrisk's "The Linux Programming Interface", Chapter 59,
+ * as well as on recent projects completed for cs344 and the chat server project completed for this class,
+ * CS372
+ */
 #include <sys/socket.h>
+#include <inttypes.h>
 #include <netdb.h>
+#include <netinet/ip.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -8,21 +15,18 @@
 #include <limits.h>
 #include "cmdfork.h"
 
-
-#define LSCMD         "-l" 
-#define GETCMD        "-g" 
+#define LSCMD        "-l" 
+#define LSCMDNO         3 
+#define GETCMD       "-g" 
+#define GETCMDNO        5
 #define BACKLOG         4 
 #define BAD_ARGS      -10
 #define BAD_PORT      -11
-#define CMD_LEN         3
+#define CMD_LEN       280
 
 #ifndef DEBUG
 #define DEBUG           0
 #endif
-
-/*
- * Much of this is influenced by Kerrisk's "The Linux Programming Interface", Chapter 59
- */
 
 
 /*
@@ -34,6 +38,7 @@
  */
 void clean_quit(int sfd, int e)
 {
+  if(DEBUG){fprintf(stderr, "In clean_quit...");}
   //close the socket
   if(sfd > -1)
   {
@@ -141,7 +146,8 @@ struct addrinfo* get_addrinfo( struct addrinfo **results )
       size_t addrinfosz = sizeof( struct addrinfo );
       dc = malloc(addrinfosz);
       memcpy(dc, the_one, addrinfosz); 
-      close(fd);
+      //TODO  
+      //close(fd);
     }
   } 
   return dc;
@@ -160,7 +166,8 @@ int get_bound_socket( struct addrinfo *iface )
 
     //success should set bindres to 0 and exit the loop
     if((bindres = bind(fd, iface->ai_addr, iface->ai_addrlen)) != 0)
-      close(fd);
+      ;
+      //TODO close(fd);
   }
   else
   {
@@ -170,33 +177,85 @@ int get_bound_socket( struct addrinfo *iface )
 }
 
 /*
- * returns 1 for valid; 0 for bad length; -1 for bad string
+ * returns 3 for "-l"; 5 for "-g"; 0 for bad length; -1 for bad string
  */
-int confirm_cmd(int bytes, char *buff, int cxfd)
+Cmd confirm_cmd(int bytes, char *buff, int cxfd)
 {
-  int res = INT_MIN;
+  Cmd cs = {0};
 
-  //easy out
-  if(bytes > 3)
+  char *tkstart = NULL;
+  char *tkarg = NULL;
+  char *tkstate = NULL;
+  char **tks = &tkstate;
+  char *delims = " \n";
+  char *strtoi = NULL; 
+  int len = -1;
+  int port = INT_MIN;
+  
+  //get the command
+  tkstart = strtok_r(buff, delims, tks);
+  if(tkstart)
   {
-    send(cxfd, "Bad Command Length: commands shoule be no more than two characters.\n", 69, 0);
-    res = 0;
-  }
-  else
-  {
-    //stamp null byte into last index and strcmp
-    buff[CMD_LEN-1] = '\0';
-    if( ! (strcmp(LSCMD, buff) == 0 || strcmp(GETCMD, buff) == 0 ))
+    len = strlen(tkstart);
+    if(len != 2) 
     {
-      send(cxfd, "Bad Command: valid commands are -l and -g\n", 43, 0);
-      res = -1;
+      send(cxfd, "Bad Command Length: commands shoule be no more than two characters.\n", 69, 0);
+      clean_quit(cxfd, errno);
+    }
+    else 
+    {
+      //check for list command; valid cmd is of length 2
+      if(strncmp(LSCMD, tkstart, 2)==0)
+      {
+        cs.cmdno = LSCMDNO;
+        if((tkarg = strtok_r(NULL, delims, tks)) != NULL)
+        {
+          //next argument after '-l' should be a port number
+          port = strtoimax(tkarg, &strtoi, 10);
+          if(!(port > 0 && port < 65536))
+          {
+            send(cxfd, "Bad Data Port Number.\n", 22, 0);
+            clean_quit(cxfd, errno);
+          }
+          cs.dport = port;
+        }
+      }
+      //check for get command; valid cmd is of length 2
+      else if( strncmp(GETCMD, tkarg, 2) == 0)
+      {
+        cs.cmdno = GETCMDNO;
+        if((tkarg = strtok_r(NULL, delims, tks)) != NULL)
+        {
+          //we will let a bad filename fail later
+          int fnlen = strlen(tkarg);
+          strncpy(cs.filename, tkarg, fnlen); 
+       
+          //this should get us the port
+          if((tkarg = strtok_r(NULL, delims, tks)) != NULL)
+          {
+            //next argument after '-l' should be a port number
+            port = strtoimax(tkarg, &strtoi, 10);
+            if(!(port > 0 && port < 65536))
+            {
+              send(cxfd, "Bad Data Port Number.\n", 22, 0);
+              clean_quit(cxfd, errno);
+            }
+            cs.dport = port;
+          }
+        } 
+      }  
+      else
+      {
+        send(cxfd, "Bad Command: valid commands are -l and -g\n", 43, 0);
+        clean_quit(cxfd, errno);
+      }
     }
   }
-  return res;
+  return cs;
 }
 
 
-void enter_cmd_loop(int cmdfd, char *port, struct addrinfo *iface)
+void enter_cmd_loop(int cmdfd, char *port)
 {
   int cxfd, gnires, cmdbytes;
   cxfd = cmdbytes = gnires = INT_MIN;
@@ -208,15 +267,17 @@ void enter_cmd_loop(int cmdfd, char *port, struct addrinfo *iface)
 
   while(1)
   {
-    //this will block until there's an attempted connection by the client
-    if((cxfd = accept(cmdfd, &claddr, &claddrlen)) == -1)
-      clean_quit(cmdfd, errno);
+    //use sockaddr_in because we want to reuse it to reconnect to the client on the data port
+    if((cxfd = accept(cmdfd, (struct sockaddr *)&claddr, &claddrlen)) == -1)
+      close(cxfd);
     else
     {
+      //struct sockaddr_in recipaddr = (sockaddr_in)claddr;
+      printf("DEBUG"); 
       /* get the hostname the client is connecting from; NI_* constants defined in netdb.h; options
         NI_NOFQDN because most likely a local subnet connection and NI_NUMERICSERV to avoid service
         port lookup, since we'll be using a non-standard port */
-      if( (gnires = getnameinfo(&claddr, claddrlen, cxinghost, NI_MAXHOST, cxingport, NI_MAXSERV, NI_NOFQDN | NI_NUMERICSERV)) == 0)
+      if( (gnires = getnameinfo( (struct sockaddr *)&claddr, claddrlen, cxinghost, NI_MAXHOST, cxingport, NI_MAXSERV, NI_NOFQDN | NI_NUMERICSERV)) == 0)
         fprintf(stdout, "Connection from %s\n", cxinghost);
       else
       {
@@ -234,10 +295,10 @@ void enter_cmd_loop(int cmdfd, char *port, struct addrinfo *iface)
         cmdbytes = recv(cxfd, cmdbuff, CMD_LEN+1, 0);
         if( cmdbytes > 0)
         {
-          int valres = confirm_cmd(cmdbytes, cmdbuff, cxfd);
-          if(valres)
+          Cmd cs = confirm_cmd(cmdbytes, cmdbuff, cxfd);
+          if(cs.cmdno > 0)
           {
-            execute_cmd(cmdbuff, iface);
+            execute_cmd(cs, &claddr);
             //call to setup data stream in fork'd child
             //you'll need to modify args to accept loop such that you can establish a new cx in
             //a different function
@@ -245,6 +306,7 @@ void enter_cmd_loop(int cmdfd, char *port, struct addrinfo *iface)
         }
       }
     }
+    close(cxfd); 
   }
 }
 
@@ -268,27 +330,24 @@ int main(int argc,char *argv[])
   struct addrinfo *aifos[] = {0};
   get_addrinfo_arr(aifos, port);
 
-  //we want a deep copy of this socket address to reuse it 
+  //we want a deep copy of this socket address to reuse it EDIT: no, no, no...
   struct addrinfo *iface = NULL;
   iface = get_addrinfo(aifos);
-  //we've got a reusable socket address; burn the tmp array
+  //we've got a reusable socket address; burn the tmp array EDIT: no, no, no...
   freeaddrinfo(*aifos); 
 
   //bind to the socket
   sckt = get_bound_socket(iface);
+  free(iface);
   
   //start listening
   if( listen(sckt, BACKLOG) == 0)
     fprintf(stdout, "Server open on %s\n", port);
   
- 
   //TODO implement SIGCHLD handler?
 
   //accept() and block until client connects
-  enter_cmd_loop(sckt, port, iface);
-
-  free(iface);
+  enter_cmd_loop(sckt, port);
 }
-
 
 
