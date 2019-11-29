@@ -26,7 +26,7 @@ void redir_stdout(int sfd)
     exit(1); 
   }
   //after dup'ing, we no longer need this
-  //TODO figure out when to close(sfd);
+  close(sfd);
 }
 
 
@@ -35,7 +35,7 @@ int send_ls(Cmd cs, struct sockaddr_in *client)
   int em, sigstatus, datafd;
   datafd = sigstatus = em = INT_MIN;
   pid_t spawnpid = INT_MIN;
-  if((datafd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+  if((datafd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
   { 
     perror("Failed to create socket for client data connection."); 
     exit(EXIT_FAILURE);
@@ -55,7 +55,7 @@ int send_ls(Cmd cs, struct sockaddr_in *client)
         //redir_stdout(datafd);
         int cxres = INT_MAX; 
         socklen_t scklen = sizeof( *client );
-        if((cxres = connect(datafd, client, scklen) < 0))
+        if((cxres = connect(datafd, (struct sockaddr *)client, scklen) < 0))
         {
           perror("Failed to connet prior to exec.");
           exit(1);
@@ -67,7 +67,7 @@ int send_ls(Cmd cs, struct sockaddr_in *client)
       } 
     //in parent
     default:
-      //TODO figure out when to close(datafd);
+      close(datafd);
       //if(DEBUG){fprintf(stderr, "In parent's case; spawnpid: %i\n", spawnpid);}
       spawnpid = waitpid(spawnpid, &em, 0); 
       if (WIFEXITED(em))

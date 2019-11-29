@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+'''
+Author:       boettchc
+Class:        cs372-400-f2019
+Assignment:   Program 2 
+Date:         November 24, 2019
+
+Some of this code was taken from Section 2.7 of Kurose and Ross. Most of it was 
+reused from Program 1.
+'''
+from socket import *
+import argparse
+import signal
+import sys
+import re
+
+#regex for checking to see if the client wants to quit
+QUIT=r'^.*\\quit'
+DEBUG=False
+DIR_MAX=5120
+
+
+'''
+pre:  a SIGINT has been received by the program
+in:   a signal object and a frame object
+out:  n/a
+post: application exits with status 0
+'''
+def trap_sigint(sig, frame):
+  print("SIGINT received. Exiting.", flush=True)
+  sys.exit(0)
+
+
+'''
+pre:  n/a
+in:   n/a
+out:  a Namespace object, as created by the ArgumentParser
+post: global var DEBUG set to true if arguments included '-d'
+note: the '-d' argument is for internal use only and is not shown to the user in usage
+'''
+def parse_args():
+  global DEBUG
+  parser = argparse.ArgumentParser(description='A simple file transfer client.')
+  parser.add_argument('-d', action='store_true', help=argparse.SUPPRESS) 
+  parser.add_argument('server', type=str, nargs=1, help='the server that the client should connect to') 
+  parser.add_argument('cmdport', type=int, nargs=1, help='the command port that the client should connect to') 
+  parser.add_argument('cmd', type=str, nargs=1, help='the command for the server (either -l or -g)')
+  parser.add_argument('filename', type=str, nargs=1, help='the file that the client requests')
+  parser.add_argument('dataport', type=int, nargs=1, help='the dataport that the client should\
+      receive on') 
+  args = parser.parse_args() 
+  if args.d:
+    DEBUG=True
+    print(args)
+    print(vars(args))
+  return args
+
+
+'''
+pre:  connection established with client and 
+in:   a byte sequence received by the client, a regular expression, and an open socket  
+out:  an integer value indicating if communication is to proceed
+post: if regex matches on msg, cx is closed
+'''
+def parse_msg(msg, regex, cx):
+  retval = False 
+  pattern = re.compile(regex)
+  if pattern.match(msg):
+    #close cx
+    print("Quitting...Bye!\n", flush=True)
+    cx.shutdown(SHUT_RDWR) 
+    cx.close()
+  else:
+    retval = True
+  return retval
+
+
+'''
+pre:  n/a 
+in:   a port supplied by the user which the server will listen on
+out:  n/a
+post: server listening on port parameter
+'''
+def connect_to_server(addr, port):
+  sock1 = socket(AF_INET,SOCK_STREAM)
+  #reuse the socket if client terminates abruptly
+  sock1.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1) 
+  sock1.connect(addr, port)
+  return sock1
+'''cmd = 
+  while True:
+    connectionSocket, addr = serverSocket.accept()
+    with connectionSocket:
+      while connectionSocket:
+        msg = connectionSocket.recv(MSG_MAX)
+        #decode the msg received and strip the newline
+        print(msg.decode('utf-8').rstrip(), flush=True)
+        if not msg: break
+        msgout = input(HANDLE)
+        #check to see if message contains \quit
+        if parse_msg(msgout, QUIT, connectionSocket):
+          msgout = (HANDLE + msgout).encode('utf-8')
+          connectionSocket.sendall(msgout)
+        else:
+          break
+      print("Connection closed.", flush=True)
+'''
+
+
+def get_rdir(sock, port):
+  args = args.cmd + " " + port 
+  datasock = socket(AF_INET, SOCK_STREAM) 
+  datasock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1) 
+  datasock.bind('', port)
+  datasock.listen(1)
+  cmdsock.sendall(args.encode())
+  #while True:
+  cxSckt, addr = datasock.accept()
+  with cxSckt:
+    while cxSckt:
+      dirlist = cxSckt.recv(DIR_MAX)
+      #decode the dirlist received 
+      print(dirlist.decode('utf-8'), flush=True)
+      if not dirlist: 
+        print("No directory listing received\n", flush=True)
+        break
+ 
+
+def main():
+  #register the signal handler for SIGINT
+  signal.signal(signal.SIGINT, trap_sigint)
+
+  #parse cmdline
+  args = parse_args()
+ 
+  cmdsock = connect_to_server(args.server, args.cmdport)
+  if cmd == '-l':
+    get_rdir(cmdsock, dataport) 
+
+
+if __name__ == "__main__":
+      main()
+

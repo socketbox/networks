@@ -1,6 +1,12 @@
 #!/usr/bin/bash
-rm -f ftserver
 DFLAG=""
+
+if [[ "$1" == '-c' ]]
+then
+	echo "CLEAN"
+	rm -f ftserver
+	rm -f *.o
+fi
 
 if [[ "$1" == '-t' ]]
 then
