@@ -1,7 +1,7 @@
 /*
- * Note to grader: much of this is influenced by Kerrisk's "The Linux Programming Interface", Chapter 59,
- * as well as on recent projects completed for cs344 and the chat server project completed for this class,
- * CS372
+ * Note to grader: much of this is influenced by Chapter 59 of Kerrisk's "The Linux Programming 
+ * Interface," as well as recent projects completed for CS344, and the chat server project 
+ * completed for this class, CS372
  */
 #include <sys/socket.h>
 #include <inttypes.h>
@@ -24,10 +24,6 @@
 #define BAD_PORT      -11
 #define CMD_LEN       280
 
-#ifndef DEBUG
-#define DEBUG           0
-#endif
-
 
 /*
  * pre:   n/a
@@ -42,26 +38,13 @@ void clean_quit(int sfd, int e)
   //close the socket
   if(sfd > -1)
   {
-    if(DEBUG)
-      fprintf(stderr, "Prior to calling shutdown and close.\n");
+    if(DEBUG){fprintf(stderr, "Prior to calling shutdown and close.\n");}
+    
     if( shutdown(sfd, SHUT_RDWR) < 0)
-    {
-      if(DEBUG)
-      {
-        fprintf(stderr, "After calling shutdown.\n");
-        fprintf(stderr, "Shutdown failed: %s", strerror(errno)); 
-      }
-    }
-    if(DEBUG)
-        fprintf(stderr, "Prior to calling close.\n");
+      fprintf(stderr, "Shutdown failed: %s", strerror(errno)); 
+    
     if( close(sfd) < 0)
-    {
-      if(DEBUG)
-      {
-        fprintf(stderr, "After calling close.\n");
-        fprintf(stderr, "Close failed: %s", strerror(errno)); 
-      }
-    }
+      fprintf(stderr, "Close failed: %s", strerror(errno)); 
   }
   //print out error
   if(e != 0)
@@ -70,6 +53,7 @@ void clean_quit(int sfd, int e)
 }
 
 
+//STEP 1
 int check_args(int argc, char *argv[])
 {
   int retval = 1;
@@ -218,10 +202,11 @@ Cmd confirm_cmd(int bytes, char *buff, int cxfd)
             clean_quit(cxfd, errno);
           }
           cs.dport = port;
+          fprintf(stdout, "List directory requested on port %i\n", port);
         }
       }
       //check for get command; valid cmd is of length 2
-      else if( strncmp(GETCMD, tkarg, 2) == 0)
+      else if( strncmp(GETCMD, tkstart, 2) == 0)
       {
         cs.cmdno = GETCMDNO;
         if((tkarg = strtok_r(NULL, delims, tks)) != NULL)
@@ -267,17 +252,16 @@ void enter_cmd_loop(int cmdfd, char *port)
 
   while(1)
   {
-    //use sockaddr_in because we want to reuse it to reconnect to the client on the data port
+    //use sockaddr_in because we want to reuse it to reconnect to the client on the data port; STEP 5
     if((cxfd = accept(cmdfd, (struct sockaddr *)&claddr, &claddrlen)) == -1)
       close(cxfd);
     else
     {
-      //struct sockaddr_in recipaddr = (sockaddr_in)claddr;
-      printf("DEBUG"); 
       /* get the hostname the client is connecting from; NI_* constants defined in netdb.h; options
         NI_NOFQDN because most likely a local subnet connection and NI_NUMERICSERV to avoid service
         port lookup, since we'll be using a non-standard port */
-      if( (gnires = getnameinfo( (struct sockaddr *)&claddr, claddrlen, cxinghost, NI_MAXHOST, cxingport, NI_MAXSERV, NI_NOFQDN | NI_NUMERICSERV)) == 0)
+      if( (gnires = getnameinfo( (struct sockaddr *)&claddr, claddrlen, cxinghost, NI_MAXHOST,\
+              cxingport, NI_MAXSERV, NI_NOFQDN | NI_NUMERICSERV)) == 0)
         fprintf(stdout, "Connection from %s\n", cxinghost);
       else
       {
@@ -286,23 +270,20 @@ void enter_cmd_loop(int cmdfd, char *port)
         exit(EXIT_FAILURE);
       }
       
-      char cmdbuff[CMD_LEN];
-      //cmd loop
-      while(1)
+      char cmdbuff[CMD_LEN] = {0};
+      //STEP 7
+      cmdbytes = recv(cxfd, cmdbuff, CMD_LEN, 0);
+      if(DEBUG){fprintf(stderr, "%s", "In cmd loop; after recv\n");}
+      if( cmdbytes > 0)
       {
-        //zero out the buffer
-        memset(cmdbuff, '\0', CMD_LEN);
-        cmdbytes = recv(cxfd, cmdbuff, CMD_LEN+1, 0);
-        if( cmdbytes > 0)
+        //the way the Cmd struct is populated needs to be refactored...
+        Cmd cs = confirm_cmd(cmdbytes, cmdbuff, cxfd);
+        strcpy(cs.client_hostname, cxinghost);
+        
+        if(cs.cmdno > 0)
         {
-          Cmd cs = confirm_cmd(cmdbytes, cmdbuff, cxfd);
-          if(cs.cmdno > 0)
-          {
-            execute_cmd(cs, &claddr);
-            //call to setup data stream in fork'd child
-            //you'll need to modify args to accept loop such that you can establish a new cx in
-            //a different function
-          }
+          if(DEBUG){fprintf(stderr, "%s", "In cmd loop; before execute_cmd.\n");}
+          execute_cmd(cs, &claddr);
         }
       }
     }
@@ -340,7 +321,7 @@ int main(int argc,char *argv[])
   sckt = get_bound_socket(iface);
   free(iface);
   
-  //start listening
+  //start listening; STEP 2
   if( listen(sckt, BACKLOG) == 0)
     fprintf(stdout, "Server open on %s\n", port);
   
@@ -348,6 +329,8 @@ int main(int argc,char *argv[])
 
   //accept() and block until client connects
   enter_cmd_loop(sckt, port);
+  
+  close(sckt);
 }
 
 

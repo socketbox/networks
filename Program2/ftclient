@@ -12,12 +12,14 @@ from socket import *
 import argparse
 import signal
 import sys
-import re
+from pathlib import Path
 
 #regex for checking to see if the client wants to quit
 QUIT=r'^.*\\quit'
 DEBUG=False
 DIR_MAX=5120
+FILE_MAX=16777216
+BUFF_SZ=4096
 
 
 '''
@@ -44,35 +46,16 @@ def parse_args():
   parser.add_argument('-d', action='store_true', help=argparse.SUPPRESS) 
   parser.add_argument('server', type=str, nargs=1, help='the server that the client should connect to') 
   parser.add_argument('cmdport', type=int, nargs=1, help='the command port that the client should connect to') 
-  parser.add_argument('cmd', type=str, nargs=1, help='the command for the server (either -l or -g)')
-  parser.add_argument('filename', type=str, nargs=1, help='the file that the client requests')
-  parser.add_argument('dataport', type=int, nargs=1, help='the dataport that the client should\
-      receive on') 
+  parser.add_argument('-g', type=str, nargs=2, dest='get_args', help='get a remote file')
+  #the command for the server (either -l or -g)',
+  #parser.add_argument('filename', type=str, nargs=1, help='the file that the client requests')
+  parser.add_argument('-l', type=str, nargs=1, dest='list_dport', help='list the contents of the remote directory')
+  #parser.add_argument('dataport', type=int, nargs=1, help='the dataport that the client should\
+  #    receive on') 
   args = parser.parse_args() 
   if args.d:
     DEBUG=True
-    print(args)
-    print(vars(args))
   return args
-
-
-'''
-pre:  connection established with client and 
-in:   a byte sequence received by the client, a regular expression, and an open socket  
-out:  an integer value indicating if communication is to proceed
-post: if regex matches on msg, cx is closed
-'''
-def parse_msg(msg, regex, cx):
-  retval = False 
-  pattern = re.compile(regex)
-  if pattern.match(msg):
-    #close cx
-    print("Quitting...Bye!\n", flush=True)
-    cx.shutdown(SHUT_RDWR) 
-    cx.close()
-  else:
-    retval = True
-  return retval
 
 
 '''
@@ -82,60 +65,103 @@ out:  n/a
 post: server listening on port parameter
 '''
 def connect_to_server(addr, port):
-  sock1 = socket(AF_INET,SOCK_STREAM)
+  sock1 = socket(AF_INET, SOCK_STREAM)
   #reuse the socket if client terminates abruptly
   sock1.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1) 
-  sock1.connect(addr, port)
+  #STEP 4 
+  sock1.connect((addr, port))
   return sock1
-'''cmd = 
-  while True:
-    connectionSocket, addr = serverSocket.accept()
-    with connectionSocket:
-      while connectionSocket:
-        msg = connectionSocket.recv(MSG_MAX)
-        #decode the msg received and strip the newline
-        print(msg.decode('utf-8').rstrip(), flush=True)
-        if not msg: break
-        msgout = input(HANDLE)
-        #check to see if message contains \quit
-        if parse_msg(msgout, QUIT, connectionSocket):
-          msgout = (HANDLE + msgout).encode('utf-8')
-          connectionSocket.sendall(msgout)
-        else:
-          break
-      print("Connection closed.", flush=True)
-'''
 
 
-def get_rdir(sock, port):
-  args = args.cmd + " " + port 
+def get_rdir(cmdsock, dport, srvname):
+  lcmd_args = "-l " + dport 
   datasock = socket(AF_INET, SOCK_STREAM) 
   datasock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1) 
-  datasock.bind('', port)
+  datasock.bind(('', int(dport)))
   datasock.listen(1)
-  cmdsock.sendall(args.encode())
-  #while True:
+  #STEP 6 
+  cmdsock.sendall(lcmd_args.encode())
+  if DEBUG: print("After call to sendall in get_rdir", file=sys.stderr, flush=True)
   cxSckt, addr = datasock.accept()
   with cxSckt:
-    while cxSckt:
-      dirlist = cxSckt.recv(DIR_MAX)
-      #decode the dirlist received 
+    dirlist = cxSckt.recv(DIR_MAX)
+    #decode the dirlist received 
+    if dirlist != b'':
+      print('Receiving directory structure from {0} on port {1}'.format(srvname, dport))
       print(dirlist.decode('utf-8'), flush=True)
-      if not dirlist: 
-        print("No directory listing received\n", flush=True)
+    else:
+      print("No directory listing received\n", flush=True)
+    cxSckt.shutdown(SHUT_RDWR)
+    cxSckt.close()
+  #close the command/control socket
+  cmdsock.close()     
+
+
+def save_file(fname, buff):
+  #check if file already exists in cwd
+  filepath = Path("./"+fname)
+  if filepath.exists():
+    prompt = "File {0} exists. Overwrite? (y/n) ".format(fname)
+    answ = ''
+    while answ not in ('y','Y','n','N'):
+      answ = input(prompt)
+    if answ in ('n','N'):
+      print("Not overwriting file. Exiting.")
+      return False
+
+  f = open(fname, "w", encoding="utf-8")
+  f.write(buff.decode('utf-8'))
+  f.close()
+  return True
+
+
+def get_rfile(cmdsock, arg_list, srvname):
+  getcmd_args = "-g " + arg_list[0] + " " + arg_list[1]
+  datasock = socket(AF_INET, SOCK_STREAM) 
+  datasock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1) 
+  datasock.bind(('', int(arg_list[1])))
+  datasock.listen(1)
+  #STEP 6 
+  cmdsock.sendall(getcmd_args.encode())
+  cxSckt, addr = datasock.accept()
+  with cxSckt:
+    #we need a more robust solution than recv() for large files, b/c server child proc
+    #is terminating with SIGPIPE
+    buff = bytearray()
+    while(True):
+      recvd_bytes = cxSckt.recv(BUFF_SZ)
+      if not recvd_bytes:
         break
- 
+      else:
+        buff.extend(recvd_bytes) 
+
+    #pass the filename and the bytes object to save_file 
+    if save_file(arg_list[0], buff):
+      print('Receiving {0} from {1} on port {2}'.format(arg_list[0],
+          srvname, arg_list[1]), flush=True)
+      print("File transfer complete.\n", flush=True)  
+    else:
+      print("No directory listing received\n", flush=True)
+    cxSckt.shutdown(SHUT_RDWR)
+    cxSckt.close()
+  #close the command/control socket
+  cmdsock.close()     
+
 
 def main():
   #register the signal handler for SIGINT
   signal.signal(signal.SIGINT, trap_sigint)
 
-  #parse cmdline
+  #parse cmdline; STEP 3  
   args = parse_args()
- 
-  cmdsock = connect_to_server(args.server, args.cmdport)
-  if cmd == '-l':
-    get_rdir(cmdsock, dataport) 
+
+  cmdsock = connect_to_server(args.server[0], args.cmdport[0])
+  if DEBUG: print('cmdsock: {0}'.format(cmdsock), file=sys.stderr) 
+  
+  if args.list_dport:
+    get_rdir(cmdsock, args.list_dport[0], args.server[0]) 
+  elif args.get_args:
+    get_rfile(cmdsock, args.get_args, args.server[0])
 
 
 if __name__ == "__main__":
