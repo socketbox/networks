@@ -144,7 +144,7 @@ def get_rfile(cmdsock, arg_list, srvname, cmdport):
 
     #pass the filename and the bytes object to save_file 
     if save_file(arg_list[0], buff):
-      print('Receiving {0} from {1} on port {2}'.format(arg_list[0],
+      print('Receiving \"{0}\" from {1} on port {2}'.format(arg_list[0],
           srvname, arg_list[1]), flush=True)
       print("File transfer complete.\n", flush=True)  
     else:

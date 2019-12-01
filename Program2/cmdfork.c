@@ -144,6 +144,7 @@ int send_ls(Cmd cs, struct sockaddr_in *client)
           perror("Failed to connet prior to exec.");
           exit(1);
         }
+        redir_stderr();
         redir_stdout(datafd);
         execlp("ls", "ls", NULL);
         perror("Execution of ls failed. Exiting.");

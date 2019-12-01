@@ -76,7 +76,7 @@ void send_error(int cmdfd, Cmd *cs, char *message)
    
   memset(buff, '\0', buffsz);
   strcat(strcat(strcat(strcat(strcat(buff, message), msg2), cs->client_hostname), ":"), strport);   
-  fprintf(stderr, "%s", buff); 
+  fprintf(stderr, "%s\n", buff); 
   
   if(DEBUG){fprintf(stderr, "In send_error: Sending %s as error msg\n", buff);} 
   
@@ -239,11 +239,6 @@ void confirm_cmd(int bytes, char *buff, int cxfd, Cmd *cs)
         cs->cmdno = GETCMDNO;
         if((tkarg = strtok_r(NULL, delims, tks)) != NULL)
         {
-          //check if file exists and is readable: https://stackoverflow.com/a/230068/148680
-          if( access( tkarg, R_OK | F_OK ) == -1)
-          {
-            send_error(cxfd, cs, "No such file.");
-          }
           //we will let a bad filename fail later <-- bad decision
           int fnlen = strlen(tkarg);
           strncpy(cs->filename, tkarg, fnlen); 
@@ -260,7 +255,23 @@ void confirm_cmd(int bytes, char *buff, int cxfd, Cmd *cs)
             }
             cs->dport = port;
           }
-        } 
+          //check if file exists and is readable: https://stackoverflow.com/a/230068/148680
+          if( access( tkarg, R_OK | F_OK ) == -1)
+          {
+            //this is a duplication of code resulting from bad planning regarding output
+            //requirements
+            fprintf(stdout, "File \"%s\" requested on port %i.\n", cs->filename, cs->dport);
+            send_error(cxfd, cs, "No such file.");
+            //why not this?
+            clean_quit(cxfd, 0);
+          }
+
+        }
+        else
+        {
+          send(cxfd, "Expected file name in request.\n", 33, 0);
+          clean_quit(cxfd, 0);
+        }
       }  
       else
       {
