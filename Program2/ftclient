@@ -115,7 +115,7 @@ def save_file(fname, buff):
   return True
 
 
-def get_rfile(cmdsock, arg_list, srvname):
+def get_rfile(cmdsock, arg_list, srvname, cmdport):
   getcmd_args = "-g " + arg_list[0] + " " + arg_list[1]
   datasock = socket(AF_INET, SOCK_STREAM) 
   datasock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1) 
@@ -123,10 +123,17 @@ def get_rfile(cmdsock, arg_list, srvname):
   datasock.listen(1)
   #STEP 6 
   cmdsock.sendall(getcmd_args.encode())
+  #get cmd response 
+  cmdresp = cmdsock.recv(BUFF_SZ)
+  if cmdresp != b'':
+    print('{0}:{1} says "{2}"'.format(srvname, cmdport, cmdresp.decode('utf-8')))
+    cmdsock.shutdown(SHUT_RDWR)
+    cmdsock.close()
+    exit(1)
+
   cxSckt, addr = datasock.accept()
   with cxSckt:
-    #we need a more robust solution than recv() for large files, b/c server child proc
-    #is terminating with SIGPIPE
+    #https://stackoverflow.com/a/17668009/148680 
     buff = bytearray()
     while(True):
       recvd_bytes = cxSckt.recv(BUFF_SZ)
@@ -161,7 +168,7 @@ def main():
   if args.list_dport:
     get_rdir(cmdsock, args.list_dport[0], args.server[0]) 
   elif args.get_args:
-    get_rfile(cmdsock, args.get_args, args.server[0])
+    get_rfile(cmdsock, args.get_args, args.server[0], args.cmdport[0])
 
 
 if __name__ == "__main__":

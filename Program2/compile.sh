@@ -10,8 +10,9 @@ fi
 
 if [[ "$1" == '-t' ]]
 then
-	echo "CTAGS"
+	echo "CTAGS/CSCOPE"
 	ctags -R ./*
+	cscope -R -b
 fi
 
 if [[ "$1" == '-g' ]]

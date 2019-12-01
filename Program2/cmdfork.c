@@ -6,12 +6,30 @@
 **********************************************************************************/
 #include <stdlib.h>
 #include <stdio.h>
+#include <fcntl.h>
 #include <limits.h>
+#include <errno.h>
 #include <wait.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/ip.h>
+#include "cmdfork.h"
 #include "ftserver.h"
+
+
+/*
+ * duplicate stdout to the socket
+ */
+void redir_stderr()
+{
+  int devnull = open("/dev/null", O_WRONLY);
+  int dupres = dup2(devnull, STDERR_FILENO);
+  if(dupres == -1)
+  { 
+    perror("Failed to duplicate stdserr to /dev/null"); 
+    exit(1); 
+  }
+}
 
 
 /*
@@ -32,14 +50,16 @@ void redir_stdout(int sfd)
 
 int send_file(Cmd cs, struct sockaddr_in *client)
 {
-  int em, sigstatus, datafd;
-  datafd = sigstatus = em = INT_MIN;
+  int em, sigstatus, datafd, send_file_res;
+  datafd = sigstatus = em = send_file_res = INT_MIN;
   pid_t spawnpid = INT_MIN;
+
   if((datafd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
   { 
     perror("Failed to create socket for client data connection."); 
     exit(EXIT_FAILURE);
   }
+
   fprintf(stdout, "Sending %s to %s:%i\n", cs.filename, cs.client_hostname, cs.dport);
   fflush(stdout);
   spawnpid = fork();
@@ -49,11 +69,10 @@ int send_file(Cmd cs, struct sockaddr_in *client)
       perror("Fork in run_fg_child returned error");
       exit(1);
       break;
-   
-    //in child 
+
+      //in child 
     case 0:
       {
-        //redir_stdout(datafd);
         int cxres = INT_MAX; 
         socklen_t scklen = sizeof( *client );
         if((cxres = connect(datafd, (struct sockaddr *)client, scklen) < 0))
@@ -62,11 +81,13 @@ int send_file(Cmd cs, struct sockaddr_in *client)
           exit(1);
         }
         redir_stdout(datafd);
+        redir_stderr();
         execlp("cat", "cat", cs.filename, NULL);
-        perror("Execution of foreground command failed. Exiting.");
+        perror("Execution of cat failed. Exiting.");
+        send_file_res = errno; 
         break;
       } 
-    //in parent
+      //in parent
     default:
       //don't need the fd after forking 
       close(datafd);
@@ -74,11 +95,13 @@ int send_file(Cmd cs, struct sockaddr_in *client)
       if (WIFEXITED(em))
       {
         sigstatus = WEXITSTATUS(em);
+        send_file_res = sigstatus; 
+        if(DEBUG){fprintf(stderr, "Exiting child with status %i\n", sigstatus);}
       }
       else if(WIFSIGNALED(em))
       {
         sigstatus = WTERMSIG(em);
-        fprintf(stderr, "terminated by signal %i\n", sigstatus);
+        if(DEBUG){fprintf(stderr, "Child terminated by signal %i\n", sigstatus);}
       }
       else
       {
@@ -86,7 +109,7 @@ int send_file(Cmd cs, struct sockaddr_in *client)
       }
       break;
   }
-  return spawnpid;  
+  return send_file_res;  
 }
 
 
@@ -123,7 +146,7 @@ int send_ls(Cmd cs, struct sockaddr_in *client)
         }
         redir_stdout(datafd);
         execlp("ls", "ls", NULL);
-        perror("Execution of foreground command failed. Exiting.");
+        perror("Execution of ls failed. Exiting.");
         break;
       } 
     //in parent
@@ -134,11 +157,12 @@ int send_ls(Cmd cs, struct sockaddr_in *client)
       if (WIFEXITED(em))
       {
         sigstatus = WEXITSTATUS(em);
+        if(DEBUG){fprintf(stderr, "Exiting child with status %i\n", sigstatus);}
       }
       else if(WIFSIGNALED(em))
       {
         sigstatus = WTERMSIG(em);
-        if(DEBUG){fprintf(stderr, "Terminated by signal %i\n", sigstatus);}
+        if(DEBUG){fprintf(stderr, "Child terminated by signal %i\n", sigstatus);}
       }
       else
       {
@@ -154,6 +178,7 @@ int send_ls(Cmd cs, struct sockaddr_in *client)
 
 int execute_cmd(const Cmd cs, struct sockaddr *client)
 {
+  int retval = 1;
   //modify the port field in the local copy of the client struct 
   struct sockaddr_in *claddrin = (struct sockaddr_in *)client;
   //grrrr...overlooking this had me flumoxed for a fair bit of time
@@ -163,14 +188,16 @@ int execute_cmd(const Cmd cs, struct sockaddr *client)
   if(cs.cmdno == LSCMDNO)
   {
     //exec ls and send results
-    send_ls(cs, claddrin);
+    fprintf(stdout, "List directory requested on port %i\n", cs.dport);
+    retval = send_ls(cs, claddrin);
   }
   //if client issued "-g"
   if(cs.cmdno == GETCMDNO)
   {
+    fprintf(stdout, "File \"%s\" requested on port %i.\n", cs.filename, cs.dport);
     //exec ls and send results
-    send_file(cs, claddrin);
+    retval = send_file(cs, claddrin);
   }
-  return 0;
+  return retval;
 }
 

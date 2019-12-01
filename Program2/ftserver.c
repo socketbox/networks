@@ -18,6 +18,7 @@
 #define LSCMD        "-l" 
 #define LSCMDNO         3 
 #define GETCMD       "-g" 
+#define PORT_STR        6
 #define GETCMDNO        5
 #define BACKLOG         4 
 #define BAD_ARGS      -10
@@ -48,8 +49,38 @@ void clean_quit(int sfd, int e)
   }
   //print out error
   if(e != 0)
+  {
+    if(DEBUG){fprintf(stderr, "%s", "In clean quit before fputs\n");}
     fputs(strerror(e), stderr);
+  }
   exit(e);
+}
+
+
+/* */
+void send_error(int cmdfd, Cmd *cs, char *message)
+{
+  int buffsz = 0;
+  //error msg 
+  buffsz += strlen(message);
+  //required verbiage 
+  char *msg2 = " Sending error message to ";
+  buffsz += strlen(msg2);
+  //client hostname
+  buffsz += strlen(cs->client_hostname);
+  char strport[PORT_STR];
+  sprintf(strport, "%i", cs->cmdport);
+  //client hostname
+  buffsz += PORT_STR; 
+  char buff[buffsz+1];
+   
+  memset(buff, '\0', buffsz);
+  strcat(strcat(strcat(strcat(strcat(buff, message), msg2), cs->client_hostname), ":"), strport);   
+  fprintf(stderr, "%s", buff); 
+  
+  if(DEBUG){fprintf(stderr, "In send_error: Sending %s as error msg\n", buff);} 
+  
+  send(cmdfd, message, strlen(message)+1, 0);
 }
 
 
@@ -163,10 +194,8 @@ int get_bound_socket( struct addrinfo *iface )
 /*
  * returns 3 for "-l"; 5 for "-g"; 0 for bad length; -1 for bad string
  */
-Cmd confirm_cmd(int bytes, char *buff, int cxfd)
+void confirm_cmd(int bytes, char *buff, int cxfd, Cmd *cs)
 {
-  Cmd cs = {0};
-
   char *tkstart = NULL;
   char *tkarg = NULL;
   char *tkstate = NULL;
@@ -191,7 +220,7 @@ Cmd confirm_cmd(int bytes, char *buff, int cxfd)
       //check for list command; valid cmd is of length 2
       if(strncmp(LSCMD, tkstart, 2)==0)
       {
-        cs.cmdno = LSCMDNO;
+        cs->cmdno = LSCMDNO;
         if((tkarg = strtok_r(NULL, delims, tks)) != NULL)
         {
           //next argument after '-l' should be a port number
@@ -201,19 +230,23 @@ Cmd confirm_cmd(int bytes, char *buff, int cxfd)
             send(cxfd, "Bad Data Port Number.\n", 22, 0);
             clean_quit(cxfd, errno);
           }
-          cs.dport = port;
-          fprintf(stdout, "List directory requested on port %i\n", port);
+          cs->dport = port;
         }
       }
       //check for get command; valid cmd is of length 2
       else if( strncmp(GETCMD, tkstart, 2) == 0)
       {
-        cs.cmdno = GETCMDNO;
+        cs->cmdno = GETCMDNO;
         if((tkarg = strtok_r(NULL, delims, tks)) != NULL)
         {
-          //we will let a bad filename fail later
+          //check if file exists and is readable: https://stackoverflow.com/a/230068/148680
+          if( access( tkarg, R_OK | F_OK ) == -1)
+          {
+            send_error(cxfd, cs, "No such file.");
+          }
+          //we will let a bad filename fail later <-- bad decision
           int fnlen = strlen(tkarg);
-          strncpy(cs.filename, tkarg, fnlen); 
+          strncpy(cs->filename, tkarg, fnlen); 
        
           //this should get us the port
           if((tkarg = strtok_r(NULL, delims, tks)) != NULL)
@@ -225,7 +258,7 @@ Cmd confirm_cmd(int bytes, char *buff, int cxfd)
               send(cxfd, "Bad Data Port Number.\n", 22, 0);
               clean_quit(cxfd, errno);
             }
-            cs.dport = port;
+            cs->dport = port;
           }
         } 
       }  
@@ -236,7 +269,6 @@ Cmd confirm_cmd(int bytes, char *buff, int cxfd)
       }
     }
   }
-  return cs;
 }
 
 
@@ -276,10 +308,13 @@ void enter_cmd_loop(int cmdfd, char *port)
       if(DEBUG){fprintf(stderr, "%s", "In cmd loop; after recv\n");}
       if( cmdbytes > 0)
       {
-        //the way the Cmd struct is populated needs to be refactored...
-        Cmd cs = confirm_cmd(cmdbytes, cmdbuff, cxfd);
-        strcpy(cs.client_hostname, cxinghost);
         
+        Cmd cs = {0};
+        strcpy(cs.client_hostname, cxinghost);
+        cs.cmdport = atoi(port);
+        if(DEBUG){fprintf(stderr, "cs.hostname: %s; cs.cmdport: %i\n", cs.client_hostname, cs.cmdport);} 
+        
+        confirm_cmd(cmdbytes, cmdbuff, cxfd, &cs);
         if(cs.cmdno > 0)
         {
           if(DEBUG){fprintf(stderr, "%s", "In cmd loop; before execute_cmd.\n");}
