@@ -220,12 +220,12 @@ int get_bound_socket( struct addrinfo *iface )
 }
 
 /* 
- * pre:   socket represented by first argument is open and connected
- * in:    integers for a socket file descriptor, a fully populated Cmd 
- *        structure, and an error message to be prepended to message
- *        sent to client
- * out:   n/a
- * post:  client is sent message
+ * pre:   client has made a request and socket argument is connected
+ * in:    character buffer for tokenizer, an integer for a socket file 
+ *        descriptor, and a Cmd structure with server and cmdport populated 
+ * out:   1 if client request if well-formed; a negative value if not
+ * post:  client informed of error in request if such is the case
+ * nb:    socket remains open after erroneous request
  */
 int confirm_cmd(char *buff, int cxfd, Cmd *cs)
 {
@@ -248,7 +248,6 @@ int confirm_cmd(char *buff, int cxfd, Cmd *cs)
     {
       send(cxfd, "Bad Command Length: commands shoule be no more than two characters.\n", 69, 0);
       result = BAD_CMD_LEN;  
-      //clean_quit(cxfd, errno);
     }
     else 
     {
@@ -264,7 +263,6 @@ int confirm_cmd(char *buff, int cxfd, Cmd *cs)
           {
             send(cxfd, "Bad Data Port Number.\n", 22, 0);
             result = BAD_PORT; 
-            //clean_quit(cxfd, errno);
           }
           cs->dport = port;
           result = 1; 
@@ -289,7 +287,6 @@ int confirm_cmd(char *buff, int cxfd, Cmd *cs)
             {
               send(cxfd, "Bad Data Port Number.\n", 22, 0);
               result = BAD_PORT; 
-              //clean_quit(cxfd, errno);
             }
             cs->dport = port;
           }
@@ -300,7 +297,6 @@ int confirm_cmd(char *buff, int cxfd, Cmd *cs)
             //requirements
             fprintf(stdout, "File \"%s\" requested on port %i.\n", cs->filename, cs->dport);
             send_error(cxfd, cs, "No such file.");
-            //dont call clean_quit because we want to keep listening for a connection
             result = BAD_FILE;
           }
           else
@@ -309,7 +305,6 @@ int confirm_cmd(char *buff, int cxfd, Cmd *cs)
         else
         {
           send(cxfd, "Expected file name in request.\n", 33, 0);
-          //clean_quit(cxfd, 0);
           result = BAD_ARGS;
         }
       }  
@@ -317,7 +312,6 @@ int confirm_cmd(char *buff, int cxfd, Cmd *cs)
       {
         send(cxfd, "Bad Command: valid commands are -l and -g\n", 43, 0);
         result = BAD_ARGS;
-        //clean_quit(cxfd, errno);
       }
     }
   }
@@ -326,7 +320,12 @@ int confirm_cmd(char *buff, int cxfd, Cmd *cs)
   return result;
 }
 
-
+/* 
+ * pre:   n/a
+ * in:    open socket file descriptor and the port (as c-string) passed as cmdline arg
+ * out:   n/a
+ * post:  server is in a permanent loop until terminating signal
+ */
 void enter_cmd_loop(int cmdfd, char *port)
 {
   int cxfd, gnires, cmdbytes;

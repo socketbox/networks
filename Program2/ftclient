@@ -3,9 +3,9 @@
 Author:       boettchc
 Class:        cs372-400-f2019
 Assignment:   Program 2 
-Date:         November 24, 2019
+Date:         December 1, 2019
 
-Some of this code was taken from Section 2.7 of Kurose and Ross. Most of it was 
+Note to grader: some of this code was taken from Section 2.7 of Kurose and Ross. Most of it was 
 reused from Program 1.
 '''
 from socket import *
@@ -59,7 +59,7 @@ def parse_args():
 
 '''
 pre:  n/a 
-in:   a port supplied by the user which the server will listen on
+in:   a address and port supplied by the user which the server will listen on
 out:  n/a
 post: server listening on port parameter
 '''
@@ -72,6 +72,13 @@ def connect_to_server(addr, port):
   return sock1
 
 
+
+'''
+pre:  n/a 
+in:   an open socket for commands to server, a numeric data port, and a server name
+out:  n/a
+post: client receives directory listing
+'''
 def get_rdir(cmdsock, dport, srvname):
   lcmd_args = "-l " + dport 
   datasock = socket(AF_INET, SOCK_STREAM) 
@@ -95,7 +102,12 @@ def get_rdir(cmdsock, dport, srvname):
   #close the command/control socket
   cmdsock.close()     
 
-
+'''
+pre:  n/a 
+in:   a filename and a buffer full of character data for writing
+out:  n/a
+post: file saved to filename
+'''
 def save_file(fname, buff):
   #check if file already exists in cwd
   filepath = Path("./"+fname)
@@ -114,6 +126,12 @@ def save_file(fname, buff):
   return True
 
 
+'''
+pre:  n/a 
+in:   an open socket for commands to server, a numeric data port, and a server name
+out:  n/a
+post: client receives directory listing
+'''
 def get_rfile(cmdsock, arg_list, srvname, cmdport):
   getcmd_args = "-g " + arg_list[0] + " " + arg_list[1]
   datasock = socket(AF_INET, SOCK_STREAM) 
@@ -121,19 +139,33 @@ def get_rfile(cmdsock, arg_list, srvname, cmdport):
   datasock.bind(('', int(arg_list[1])))
   datasock.listen(1)
   #STEP 6 
+  #need to do this, otherwise we'll wait indefinitely for a response on ctrl port 
+  cmdsock.setblocking(False) 
+  #but we do need to wait just a little while, in case of an error msg from server...
+  cmdsock.settimeout(2) 
   cmdsock.sendall(getcmd_args.encode())
   #get cmd response 
-  cmdresp = cmdsock.recv(BUFF_SZ)
-  if cmdresp != b'':
+  cmdresp = None 
+  try:
+    cmdresp = cmdsock.recv(BUFF_SZ)
+  except BlockingIOError as bioe:
+    if(DEBUG): print("BlockingIOerror received", file=sys.stderr, flush=True)
+  except OSError as ose:
+    if(DEBUG): print("Socket timedout", file=sys.stderr, flush=True)
+
+  #This seems like a kluge--isn't there a way to check for empty and None at the same time?
+  if cmdresp != b'' and cmdresp != None:
+    if DEBUG: print("Before printing cmdresp", file=sys.stderr, flush=True)
     print('{0}:{1} says "{2}"'.format(srvname, cmdport, cmdresp.decode('utf-8')))
     cmdsock.shutdown(SHUT_RDWR)
     cmdsock.close()
     exit(1)
-
+  
   cxSckt, addr = datasock.accept()
   with cxSckt:
     #https://stackoverflow.com/a/17668009/148680 
     buff = bytearray()
+    if DEBUG: print("In with cxSckt of get_rfile, after bytearray init", file=sys.stderr, flush=True)
     while(True):
       recvd_bytes = cxSckt.recv(BUFF_SZ)
       if not recvd_bytes:
@@ -147,7 +179,7 @@ def get_rfile(cmdsock, arg_list, srvname, cmdport):
           srvname, arg_list[1]), flush=True)
       print("File transfer complete.\n", flush=True)  
     else:
-      print("No directory listing received\n", flush=True)
+      print("No file written.\n", flush=True)
     cxSckt.shutdown(SHUT_RDWR)
     cxSckt.close()
   #close the command/control socket

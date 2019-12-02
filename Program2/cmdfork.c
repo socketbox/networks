@@ -53,6 +53,12 @@ void redir_stdout(int sfd)
 }
 
 
+/*
+ *  pre:   n/a
+ *   in:   a Cmd structure, a socket address structure
+ *  out:   an integer indicating exit status (iffy, not well-implemented)
+ * post:   either file is sent to client, or not
+ */
 int send_file(Cmd cs, struct sockaddr_in *client)
 {
   int em, sigstatus, datafd, send_file_res;
@@ -118,6 +124,12 @@ int send_file(Cmd cs, struct sockaddr_in *client)
 }
 
 
+/*
+ *  pre:   n/a
+ *   in:   a Cmd structure, a socket address structure
+ *  out:   an integer indicating exit status (iffy, not well-implemented)
+ * post:   either directory listing is sent to client, or not
+ */
 int send_ls(Cmd cs, struct sockaddr_in *client)
 {
   int em, sigstatus, datafd;
@@ -182,6 +194,12 @@ int send_ls(Cmd cs, struct sockaddr_in *client)
 }
 
 
+/*
+ *  pre:   n/a
+ *   in:   a Cmd structure, a socket address structure
+ *  out:   an integer indicating exit status (iffy, not well-implemented)
+ * post:   given the command field in the Cmd struct cs, the relevant function is called
+ */
 int execute_cmd(const Cmd cs, struct sockaddr *client)
 {
   int retval = 1;

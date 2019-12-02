@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 DFLAG=""
 
 if [[ "$1" == '-c' ]]
@@ -26,7 +26,6 @@ fi
 
 if [[ "$#" -eq 0 ]]
 then
-	echo "GRADING"
 	rm -f ./*.o ftserver	
 	gcc -std=gnu11 -O3 -Wall -pedantic -I. -c cmdfork.c
 	gcc -std=gnu11 -O3 -Wall -pedantic -I. -o ftserver cmdfork.o ftserver.c
