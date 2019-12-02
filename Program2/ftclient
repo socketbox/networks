@@ -34,11 +34,12 @@ def trap_sigint(sig, frame):
 
 
 '''
-pre:  n/a
-in:   n/a
-out:  a Namespace object, as created by the ArgumentParser
-post: global var DEBUG set to true if arguments included '-d'
-note: the '-d' argument is for internal use only and is not shown to the user in usage
+pre:    n/a
+in:     n/a
+out:    a Namespace object, as created by the ArgumentParser
+post:   global var DEBUG set to true if arguments included '-d'
+note:   the '-d' argument is for internal use only and is not shown to the user in usage
+aside:  shouldn't have used nargs=1, as there's no point in having a list of one item
 '''
 def parse_args():
   global DEBUG
@@ -46,12 +47,10 @@ def parse_args():
   parser.add_argument('-d', action='store_true', help=argparse.SUPPRESS) 
   parser.add_argument('server', type=str, nargs=1, help='the server that the client should connect to') 
   parser.add_argument('cmdport', type=int, nargs=1, help='the command port that the client should connect to') 
-  parser.add_argument('-g', type=str, nargs=2, dest='get_args', help='get a remote file')
-  #the command for the server (either -l or -g)',
-  #parser.add_argument('filename', type=str, nargs=1, help='the file that the client requests')
-  parser.add_argument('-l', type=str, nargs=1, dest='list_dport', help='list the contents of the remote directory')
-  #parser.add_argument('dataport', type=int, nargs=1, help='the dataport that the client should\
-  #    receive on') 
+  parser.add_argument('-g', type=str, nargs=2, dest='get_args', help='get a remote file',
+      metavar=('file', 'data_port'))
+  parser.add_argument('-l', type=str, nargs=1, dest='list_dport', help='list the contents of the\
+      remote directory', metavar='data_port')
   args = parser.parse_args() 
   if args.d:
     DEBUG=True

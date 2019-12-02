@@ -1,4 +1,11 @@
 /*
+ * Author:          boettchc 
+ * Class:           cs372-400-f2019 
+ * Assignment:      Program 2 
+ * Filename:        ftserver.c
+ * Last Modified:   December 1 , 2019
+ * Description:     A simple server for a file transfer program.
+ * 
  * Note to grader: much of this is influenced by Chapter 59 of Kerrisk's "The Linux Programming 
  * Interface," as well as recent projects completed for CS344, and the chat server project 
  * completed for this class, CS372
@@ -7,6 +14,7 @@
 #include <inttypes.h>
 #include <netdb.h>
 #include <netinet/ip.h>
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -23,6 +31,8 @@
 #define BACKLOG         4 
 #define BAD_ARGS      -10
 #define BAD_PORT      -11
+#define BAD_CMD_LEN   -12 
+#define BAD_FILE      -13
 #define CMD_LEN       280
 
 
@@ -57,7 +67,14 @@ void clean_quit(int sfd, int e)
 }
 
 
-/* */
+/* 
+ * pre:   socket represented by first argument is open and connected
+ * in:    integers for a socket file descriptor, a fully populated Cmd 
+ *        structure, and an error message to be prepended to message
+ *        sent to client
+ * out:   n/a
+ * post:  client is sent message
+ */
 void send_error(int cmdfd, Cmd *cs, char *message)
 {
   int buffsz = 0;
@@ -85,6 +102,13 @@ void send_error(int cmdfd, Cmd *cs, char *message)
 
 
 //STEP 1
+/* 
+ * pre:   n/a
+ * in:    argc and argv array that are standard to main function signature
+ * out:   1 if all-good; not 1 if wrong number of arguments or port is outside
+ *        of correct range
+ * post:  n/a
+ */
 int check_args(int argc, char *argv[])
 {
   int retval = 1;
@@ -111,18 +135,13 @@ void print_usage()
 
 /*
  * pre: 	results struct has been zeroed out
- * in:		pointer to array of addrinfo structs and command-line args array
+ * in:		pointers to array of addrinfo structs and port, respectively
  * out:		n/a
  * post:  results array populated by call to getaddrinfo()
  */
 void get_addrinfo_arr(struct addrinfo *results[], char *port)
 {
-  if(DEBUG)
-  {
-    fprintf(stderr, "In build socket struct...\n");
-  }
-  struct addrinfo cfg;
-  memset(&cfg, 0, sizeof(struct addrinfo));
+  struct addrinfo cfg = {0};
   cfg.ai_canonname = NULL;
   cfg.ai_addr = NULL;
   cfg.ai_next = NULL;
@@ -134,16 +153,24 @@ void get_addrinfo_arr(struct addrinfo *results[], char *port)
   //don't understand the point in leaving this 0, when we know we want TCP
   cfg.ai_protocol = IPPROTO_TCP;
 
-  int rv = -2;
+  int rv = INT_MIN;
   //pass host name and port without parsing 
   if( ( rv = getaddrinfo(NULL, port, &cfg, results) ) != 0 )
   {
-    perror("Fatal. Did not obtain socket");
+    perror("Fatal. Failed to get IP and port as address structure.");
     clean_quit(-1, rv); 
   }
 }
 
 
+/* 
+ * pre:   socket represented by first argument is open and connected
+ * in:    integers for a socket file descriptor, a fully populated Cmd 
+ *        structure, and an error message to be prepended to message
+ *        sent to client
+ * out:   n/a
+ * post:  client is sent message
+ */
 struct addrinfo* get_addrinfo( struct addrinfo **results )
 {
   //temp. file descriptor
@@ -162,11 +189,12 @@ struct addrinfo* get_addrinfo( struct addrinfo **results )
       dc = malloc(addrinfosz);
       memcpy(dc, the_one, addrinfosz); 
       //TODO  
-      //close(fd);
+      close(fd);
     }
   } 
   return dc;
 }
+
 
 int get_bound_socket( struct addrinfo *iface )
 {
@@ -191,11 +219,17 @@ int get_bound_socket( struct addrinfo *iface )
   return fd;
 }
 
-/*
- * returns 3 for "-l"; 5 for "-g"; 0 for bad length; -1 for bad string
+/* 
+ * pre:   socket represented by first argument is open and connected
+ * in:    integers for a socket file descriptor, a fully populated Cmd 
+ *        structure, and an error message to be prepended to message
+ *        sent to client
+ * out:   n/a
+ * post:  client is sent message
  */
-void confirm_cmd(int bytes, char *buff, int cxfd, Cmd *cs)
+int confirm_cmd(char *buff, int cxfd, Cmd *cs)
 {
+  int result = INT_MAX; 
   char *tkstart = NULL;
   char *tkarg = NULL;
   char *tkstate = NULL;
@@ -213,7 +247,8 @@ void confirm_cmd(int bytes, char *buff, int cxfd, Cmd *cs)
     if(len != 2) 
     {
       send(cxfd, "Bad Command Length: commands shoule be no more than two characters.\n", 69, 0);
-      clean_quit(cxfd, errno);
+      result = BAD_CMD_LEN;  
+      //clean_quit(cxfd, errno);
     }
     else 
     {
@@ -228,9 +263,11 @@ void confirm_cmd(int bytes, char *buff, int cxfd, Cmd *cs)
           if(!(port > 0 && port < 65536))
           {
             send(cxfd, "Bad Data Port Number.\n", 22, 0);
-            clean_quit(cxfd, errno);
+            result = BAD_PORT; 
+            //clean_quit(cxfd, errno);
           }
           cs->dport = port;
+          result = 1; 
         }
       }
       //check for get command; valid cmd is of length 2
@@ -251,35 +288,42 @@ void confirm_cmd(int bytes, char *buff, int cxfd, Cmd *cs)
             if(!(port > 0 && port < 65536))
             {
               send(cxfd, "Bad Data Port Number.\n", 22, 0);
-              clean_quit(cxfd, errno);
+              result = BAD_PORT; 
+              //clean_quit(cxfd, errno);
             }
             cs->dport = port;
           }
           //check if file exists and is readable: https://stackoverflow.com/a/230068/148680
-          if( access( tkarg, R_OK | F_OK ) == -1)
+          if( access( cs->filename, R_OK | F_OK ) == -1)
           {
             //this is a duplication of code resulting from bad planning regarding output
             //requirements
             fprintf(stdout, "File \"%s\" requested on port %i.\n", cs->filename, cs->dport);
             send_error(cxfd, cs, "No such file.");
-            //why not this?
-            clean_quit(cxfd, 0);
+            //dont call clean_quit because we want to keep listening for a connection
+            result = BAD_FILE;
           }
-
+          else
+            result = 1;
         }
         else
         {
           send(cxfd, "Expected file name in request.\n", 33, 0);
-          clean_quit(cxfd, 0);
+          //clean_quit(cxfd, 0);
+          result = BAD_ARGS;
         }
       }  
       else
       {
         send(cxfd, "Bad Command: valid commands are -l and -g\n", 43, 0);
-        clean_quit(cxfd, errno);
+        result = BAD_ARGS;
+        //clean_quit(cxfd, errno);
       }
     }
   }
+  //result must not be left unaltered after init
+  assert(result <= 1);
+  return result;
 }
 
 
@@ -325,8 +369,7 @@ void enter_cmd_loop(int cmdfd, char *port)
         cs.cmdport = atoi(port);
         if(DEBUG){fprintf(stderr, "cs.hostname: %s; cs.cmdport: %i\n", cs.client_hostname, cs.cmdport);} 
         
-        confirm_cmd(cmdbytes, cmdbuff, cxfd, &cs);
-        if(cs.cmdno > 0)
+        if(confirm_cmd(cmdbuff, cxfd, &cs) == 1)
         {
           if(DEBUG){fprintf(stderr, "%s", "In cmd loop; before execute_cmd.\n");}
           execute_cmd(cs, &claddr);

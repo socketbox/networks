@@ -1,9 +1,14 @@
-/********************************************************************************** 
+/*
+ * Author:          boettchc 
+ * Class:           cs372-400-f2019 
+ * Assignment:      Program 2 
+ * Filename:        cmdfork.c
+ * Last Modified:   December 1 , 2019
  * 
- * Note to grader: almost all of the code in this file was taken from a 
- * project that was recently completed for CS344
+ * Note to grader: much of the code in this file was taken from a project that
+ * was recently completed for CS344
  * 
-**********************************************************************************/
+ */
 #include <stdlib.h>
 #include <stdio.h>
 #include <fcntl.h>
@@ -18,7 +23,7 @@
 
 
 /*
- * duplicate stdout to the socket
+ * send stderr to /dev/null
  */
 void redir_stderr()
 {
